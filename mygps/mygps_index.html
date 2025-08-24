@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Live GPS Tracker</title>
+
+  <!-- Leaflet (free, no API key) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity=""
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity=""
+    crossorigin=""
+  ></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, Arial, sans-serif; }
+    #app { max-width: 900px; margin: 0 auto; padding: 12px; }
+    #map { height: 70vh; width: 100%; border-radius: 16px; }
+    .card { padding: 12px 16px; border: 1px solid #eee; border-radius: 12px; margin-bottom: 12px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row > div { flex: 1 1 200px; }
+    .muted { color: #666; }
+    button { padding: 8px 12px; border-radius: 10px; border: 1px solid #ddd; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>Live GPS Tracker</h2>
+
+    <div class="card row">
+      <div><b>Status:</b> <span id="status">Waiting for data…</span></div>
+      <div><b>Lat, Lng:</b> <span id="latlng">—</span></div>
+      <div><b>Speed:</b> <span id="speed">—</span></div>
+      <div><b>Sats:</b> <span id="sats">—</span></div>
+      <div class="muted">Last update: <span id="time">—</span></div>
+      <div><button id="followBtn">Follow ON</button></div>
+    </div>
+
+    <div id="map"></div>
+  </div>
+
+  <script>
+    // ---- EDIT THIS: your Firebase RTDB URL (no trailing slash)
+    const DB_URL = "https://gps-tracker-n08labs-default-rtdb.firebaseio.com/";
+
+    const latestEndpoint = DB_URL + "/tracker/latest.json";
+
+    // Map setup
+    let map = L.map('map').setView([17.385, 78.4867], 15); // start near Hyderabad
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    let marker = L.marker([17.385, 78.4867]).addTo(map);
+    let polyline = L.polyline([], { weight: 4 }).addTo(map);
+    let follow = true;
+
+    const statusEl = document.getElementById('status');
+    const latlngEl = document.getElementById('latlng');
+    const speedEl  = document.getElementById('speed');
+    const satsEl   = document.getElementById('sats');
+    const timeEl   = document.getElementById('time');
+    const followBtn = document.getElementById('followBtn');
+
+    followBtn.addEventListener('click', () => {
+      follow = !follow;
+      followBtn.textContent = follow ? 'Follow ON' : 'Follow OFF';
+    });
+
+    async function fetchLatest() {
+      try {
+        const res = await fetch(latestEndpoint, { cache: 'no-store' });
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        const data = await res.json();
+
+        if (!data || typeof data.lat !== 'number' || typeof data.lng !== 'number') {
+          statusEl.textContent = 'No location yet…';
+          return;
+        }
+
+        const lat = data.lat, lng = data.lng;
+        const pos = [lat, lng];
+
+        marker.setLatLng(pos);
+        polyline.addLatLng(pos);
+        if (follow) map.setView(pos);
+
+        statusEl.textContent = 'Live';
+        latlngEl.textContent = lat.toFixed(6) + ', ' + lng.toFixed(6);
+        speedEl.textContent  = (data.speed_kmph ?? 0).toFixed(2) + ' km/h';
+        satsEl.textContent   = (data.sats ?? '—');
+        timeEl.textContent   = new Date().toLocaleTimeString();
+      } catch (e) {
+        statusEl.textContent = 'Error fetching: ' + e.message;
+      }
+    }
+
+    // Poll every 5 seconds
+    fetchLatest();
+    setInterval(fetchLatest, 5000);
+  </script>
+</body>
+</html>
